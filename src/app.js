@@ -7,6 +7,8 @@ const morgan = require('morgan');
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const claimsRoutes = require('./routes/claims');
+const aiMatchingRoutes = require('./routes/aiMatching');
+const cctvRoutes = require('./routes/cctvVerification');
 
 const saleRoutes = require('./routes/sale.routes');
 const adminSaleRoutes = require('./routes/adminsale.routes');
@@ -28,6 +30,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api', claimsRoutes);
+app.use('/api', aiMatchingRoutes);
+app.use('/api/cctv', cctvRoutes);
 
 // 🔹 Your sale feature
 app.use('/api/sale', saleRoutes);

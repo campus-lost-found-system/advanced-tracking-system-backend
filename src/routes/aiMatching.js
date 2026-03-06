@@ -1,0 +1,49 @@
+const express = require('express');
+const router = express.Router();
+const matchingService = require('../services/matchingService');
+const { verifyFirebaseToken } = require('../middlewares/authMiddleware');
+
+const VALID_COLLECTIONS = ['lostItems', 'foundItems'];
+
+const sendError = (res, error) => {
+    if (error.isParseError) {
+        console.error('AI Parse error:', error.raw);
+        return res.status(500).json({ success: false, error: 'AI response parse failed', raw: error.raw });
+    }
+    console.error('Route error:', error.message);
+    return res.status(500).json({ success: false, error: error.message || 'Internal Server Error' });
+};
+
+// POST /api/ai/extract-features/:itemId/:collection
+router.post('/ai/extract-features/:itemId/:collection', verifyFirebaseToken, async (req, res) => {
+    try {
+        const { itemId, collection } = req.params;
+        if (!itemId) return res.status(400).json({ success: false, error: 'itemId is required' });
+        if (!VALID_COLLECTIONS.includes(collection)) {
+            return res.status(400).json({ success: false, error: 'collection must be "lostItems" or "foundItems"' });
+        }
+
+        const features = await matchingService.extractFeatures(itemId, collection);
+        return res.json({ success: true, data: features });
+    } catch (error) {
+        sendError(res, error);
+    }
+});
+
+// POST /api/ai/compare-and-suggest/:itemId/:collection
+router.post('/ai/compare-and-suggest/:itemId/:collection', verifyFirebaseToken, async (req, res) => {
+    try {
+        const { itemId, collection } = req.params;
+        if (!itemId) return res.status(400).json({ success: false, error: 'itemId is required' });
+        if (!VALID_COLLECTIONS.includes(collection)) {
+            return res.status(400).json({ success: false, error: 'collection must be "lostItems" or "foundItems"' });
+        }
+
+        const suggestions = await matchingService.compareAndSuggest(itemId, collection);
+        return res.json({ success: true, data: suggestions });
+    } catch (error) {
+        sendError(res, error);
+    }
+});
+
+module.exports = router;
