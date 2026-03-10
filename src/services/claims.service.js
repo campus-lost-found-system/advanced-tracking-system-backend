@@ -54,20 +54,45 @@ class ClaimsService {
             .orderBy('createdAt', 'desc')
             .get();
 
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const claims = [];
+        for (const doc of snapshot.docs) {
+            const data = doc.data();
+            const claim = { id: doc.id, ...data };
+            
+            if (data.itemId) {
+                const itemDoc = await db.collection('items').doc(data.itemId).get();
+                if (itemDoc.exists) {
+                    claim.item = { id: itemDoc.id, ...itemDoc.data() };
+                }
+            }
+            claims.push(claim);
+        }
+
+        return claims;
     }
 
-    /**
-     * Get all pending claims (Admin)
-     * @returns {Promise<Array>}
-     */
     async getPendingClaims() {
         const snapshot = await db.collection('claims')
             .where('status', '==', 'pending')
             .orderBy('createdAt', 'asc') // Oldest first for admin queue
             .get();
 
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const claims = [];
+        for (const doc of snapshot.docs) {
+            const data = doc.data();
+            const claim = { id: doc.id, ...data };
+            
+            // Populate item details
+            if (data.itemId) {
+                const itemDoc = await db.collection('items').doc(data.itemId).get();
+                if (itemDoc.exists) {
+                    claim.item = { id: itemDoc.id, ...itemDoc.data() };
+                }
+            }
+            claims.push(claim);
+        }
+
+        return claims;
     }
 
     /**

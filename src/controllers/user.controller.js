@@ -59,12 +59,25 @@ const getProfile = async (req, res) => {
 
 const updateProfile = async (req, res) => {
     try {
-        // Update logic
+        const uid = req.user.uid;
+        // Mock handling for fake admin
+        if (uid === 'admin-uid') {
+            return success(res, req.body, 'Profile updated');
+        }
+
+        const { db } = require('../config/firebase');
+        const userRef = db.collection('users').doc(uid);
+        
+        await userRef.set({
+            ...req.body,
+            updatedAt: new Date().toISOString()
+        }, { merge: true });
+
         return success(res, req.body, 'Profile updated');
     } catch (err) {
-        return error(res, 'Failed to update profile', 500, err);
+        return error(res, 'Failed to update profile', 500, err.message);
     }
-}
+};
 
 module.exports = {
     getProfile,
