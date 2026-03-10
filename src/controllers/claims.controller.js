@@ -12,14 +12,17 @@ const isAdmin = (user) => {
 
 const createClaim = async (req, res) => {
     try {
-        const { itemId } = req.body;
+        const { itemId, lostItemId } = req.body;
         const uid = req.user.uid;
 
         if (!itemId) {
             return error(res, 'ItemId is required', 400);
         }
+        if (!lostItemId) {
+            return error(res, 'lostItemId is required — select your lost item', 400);
+        }
 
-        const result = await claimsService.createClaim(itemId, uid);
+        const result = await claimsService.createClaim(itemId, uid, lostItemId);
         return success(res, result, 'Claim submitted successfully', 201);
     } catch (err) {
         if (err.message.includes('Duplicate claim')) {

@@ -175,6 +175,92 @@ class MatchingService {
         return top10;
 
     }
+
+    /**
+     * Compare a specific lost item against a specific found item.
+     * Extracts features from both if not already extracted, then uses Groq AI
+     * to produce a similarity score.
+     *
+     * @param {string} lostItemId  – the claimant's lost item
+     * @param {string} foundItemId – the found item being claimed
+     * @returns {Object} { similarity_score, matching_attributes, mismatched_attributes, lostFeatures, foundFeatures }
+     */
+    async compareTwo(lostItemId, foundItemId) {
+        // 1. Read both items
+        const lostDoc = await db.collection('items').doc(lostItemId).get();
+        if (!lostDoc.exists) throw new Error('Lost item not found');
+        const foundDoc = await db.collection('items').doc(foundItemId).get();
+        if (!foundDoc.exists) throw new Error('Found item not found');
+
+        const lostItem = lostDoc.data();
+        const foundItem = foundDoc.data();
+
+        // 2. Extract features if missing
+        if (!lostItem.features && lostItem.imageUrl) {
+            const base64 = await this._getBase64Image(lostItem.imageUrl);
+            const extractPrompt =
+                'You are a visual feature extractor. Analyze this item image and return ONLY a JSON object with these fields: ' +
+                '{ "category": string, "colors": string[], "shape": string, "size_estimate": string, ' +
+                '"distinctive_features": string[], "texture": string }. ' +
+                'No explanation, no markdown, raw JSON only.';
+            lostItem.features = await groqVision.analyzeImage(base64, extractPrompt);
+            await db.collection('items').doc(lostItemId).update({ features: lostItem.features });
+        }
+
+        if (!foundItem.features && foundItem.imageUrl) {
+            const base64 = await this._getBase64Image(foundItem.imageUrl);
+            const extractPrompt =
+                'You are a visual feature extractor. Analyze this item image and return ONLY a JSON object with these fields: ' +
+                '{ "category": string, "colors": string[], "shape": string, "size_estimate": string, ' +
+                '"distinctive_features": string[], "texture": string }. ' +
+                'No explanation, no markdown, raw JSON only.';
+            foundItem.features = await groqVision.analyzeImage(base64, extractPrompt);
+            await db.collection('items').doc(foundItemId).update({ features: foundItem.features });
+        }
+
+        if (!lostItem.features || !foundItem.features) {
+            throw new Error('Could not extract features from one or both items (no image?)');
+        }
+
+        // 3. Compare using Groq AI
+        const systemPrompt =
+            'You are an item similarity scorer. Given two item feature descriptions as JSON, ' +
+            'return ONLY a JSON object: { "similarity_score": number (0.0–1.0), ' +
+            '"matching_attributes": string[], "mismatched_attributes": string[] }. ' +
+            'No explanation, raw JSON only.';
+
+        const prompt =
+            `Lost item features: ${JSON.stringify(lostItem.features)}\n` +
+            `Found item features: ${JSON.stringify(foundItem.features)}`;
+
+        const result = await groqVision.analyzeText(systemPrompt, prompt);
+
+        let score = result.similarity_score || 0;
+
+        // Metadata boosts
+        const lostZone = (lostItem.zone || lostItem.location || '').toLowerCase();
+        const foundZone = (foundItem.zone || foundItem.location || '').toLowerCase();
+        if (lostZone && foundZone && lostZone === foundZone) {
+            score += 0.10;
+        }
+
+        const srcCat = (lostItem.features.category || '').toLowerCase();
+        const candCat = (foundItem.features.category || '').toLowerCase();
+        if (srcCat && candCat) {
+            if (srcCat === candCat) score += 0.15;
+            else score -= 0.20;
+        }
+
+        score = Math.max(0, Math.min(1, score));
+
+        return {
+            similarity_score: parseFloat(score.toFixed(3)),
+            matching_attributes: result.matching_attributes || [],
+            mismatched_attributes: result.mismatched_attributes || [],
+            lostFeatures: lostItem.features,
+            foundFeatures: foundItem.features
+        };
+    }
 }
 
 module.exports = new MatchingService();

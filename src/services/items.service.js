@@ -107,7 +107,10 @@ class ItemsService {
                 .get();
 
             snapshot.forEach(doc => {
-                result.push({ id: doc.id, ...doc.data() });
+                const data = doc.data();
+                if (data.status !== 'returned') {
+                    result.push({ id: doc.id, ...data });
+                }
             });
             return result;
         } catch (error) {
@@ -124,14 +127,21 @@ class ItemsService {
         try {
             let ref = this.collection.where('isDeleted', '==', false);
 
-            if (query.type) {
+            if (query.type && query.type !== 'all') {
                 ref = ref.where('type', '==', query.type);
+            }
+            if (query.status) {
+                ref = ref.where('status', '==', query.status);
             }
 
             const snapshot = await ref.get();
             const result = [];
             snapshot.forEach(doc => {
-                result.push({ id: doc.id, ...doc.data() });
+                const data = doc.data();
+                // Filter out 'returned' items unless explicitly requested
+                if (query.includeReturned || query.status === 'returned' || data.status !== 'returned') {
+                    result.push({ id: doc.id, ...data });
+                }
             });
 
             return result;

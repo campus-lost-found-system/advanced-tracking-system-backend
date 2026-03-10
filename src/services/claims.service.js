@@ -7,18 +7,8 @@ class ClaimsService {
      * @param {string} claimantUid 
      * @returns {Promise<Object>}
      */
-    async createClaim(itemId, claimantUid) {
+    async createClaim(itemId, claimantUid, lostItemId) {
         // Prevent duplicate claims per item per user
-        // We check if there is an existing claim for this item by this user that is NOT rejected?
-        // Prompt says "Prevent duplicate claims per item per user". 
-        // Usually implies any active claim. But maybe even history?
-        // I will check for 'pending' or 'approved' status. If rejected, maybe they can claim again?
-        // Let's stick to strict "duplicate" -> if one exists with same itemId and claimantUid, block it?
-        // "Status defaults to pending".
-        // Let's assume we block if there's a pending or approved claim. Rejected ones might allow retry.
-        // Actually, prompt just says "Prevent duplicate claims per item per user".
-        // I'll check for any claim with same itemId and claimantUid that is NOT rejected.
-
         const existingClaims = await db.collection('claims')
             .where('itemId', '==', itemId)
             .where('claimantUid', '==', claimantUid)
@@ -29,11 +19,27 @@ class ClaimsService {
             throw new Error('Duplicate claim: You have already claimed this item.');
         }
 
+        // Validate the found item exists
+        const foundItemDoc = await db.collection('items').doc(itemId).get();
+        if (!foundItemDoc.exists) throw new Error('Found item not found');
+
+        // Validate the lost item exists and belongs to the claimant
+        if (!lostItemId) throw new Error('You must select your lost item to make a claim');
+        const lostItemDoc = await db.collection('items').doc(lostItemId).get();
+        if (!lostItemDoc.exists) throw new Error('Lost item not found');
+        if (lostItemDoc.data().userId !== claimantUid) throw new Error('Lost item does not belong to you');
+
+        const foundItem = foundItemDoc.data();
+
         const newClaim = {
             itemId,
+            lostItemId,
             claimantUid,
             status: 'pending',
-            aiConfidence: Math.floor(Math.random() * 100), // Mock AI confidence
+            // Copy metadata for CCTV verification
+            zone: foundItem.zone || foundItem.location || null,
+            dateOfLoss: foundItem.dateOfLoss || null,
+            timeOfLoss: foundItem.timeOfLoss || null,
             adminNotes: [],
             locked: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -58,11 +64,19 @@ class ClaimsService {
         for (const doc of snapshot.docs) {
             const data = doc.data();
             const claim = { id: doc.id, ...data };
-            
+
+            // Populate found item
             if (data.itemId) {
                 const itemDoc = await db.collection('items').doc(data.itemId).get();
                 if (itemDoc.exists) {
                     claim.item = { id: itemDoc.id, ...itemDoc.data() };
+                }
+            }
+            // Populate lost item
+            if (data.lostItemId) {
+                const lostDoc = await db.collection('items').doc(data.lostItemId).get();
+                if (lostDoc.exists) {
+                    claim.lostItem = { id: lostDoc.id, ...lostDoc.data() };
                 }
             }
             claims.push(claim);
@@ -81,12 +95,19 @@ class ClaimsService {
         for (const doc of snapshot.docs) {
             const data = doc.data();
             const claim = { id: doc.id, ...data };
-            
-            // Populate item details
+
+            // Populate found item
             if (data.itemId) {
                 const itemDoc = await db.collection('items').doc(data.itemId).get();
                 if (itemDoc.exists) {
                     claim.item = { id: itemDoc.id, ...itemDoc.data() };
+                }
+            }
+            // Populate lost item
+            if (data.lostItemId) {
+                const lostDoc = await db.collection('items').doc(data.lostItemId).get();
+                if (lostDoc.exists) {
+                    claim.lostItem = { id: lostDoc.id, ...lostDoc.data() };
                 }
             }
             claims.push(claim);
