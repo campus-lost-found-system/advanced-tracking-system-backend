@@ -23,3 +23,8 @@ campus-57557-firebase-adminsdk-fbsvc-b39ee43796.json
 package-lock.json
 
 
+architect.md
+CODEBASE_ARCHITECTURE.md
+firestore_security_rules_snippet.txt
+gg.js
+/public

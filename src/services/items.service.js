@@ -1,7 +1,11 @@
 const { admin, db } = require('../config/firebase');
-const storage = admin.storage();
-const fs = require('fs');
-const path = require('path');
+const cloudinary = require('cloudinary').v2;
+
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 class ItemsService {
     constructor() {
@@ -39,7 +43,7 @@ class ItemsService {
     }
 
     /**
-     * Upload Image to Firebase Storage
+     * Upload Image to Cloudinary
      * @param {string} itemId 
      * @param {string} userId 
      * @param {string} imageBase64 
@@ -64,14 +68,19 @@ class ItemsService {
             const buffer = Buffer.from(matches[2], 'base64');
             const extension = type.split('/')[1];
 
-            const fileName = `${itemId}_${Date.now()}.${extension}`;
-            const filePath = path.join(__dirname, '../../public/uploads', fileName);
+            const fileName = `${itemId}_${Date.now()}`;
 
-            // Write the buffer to the file system
-            fs.writeFileSync(filePath, buffer);
-
-            // Construct the local static URL using the server's HTTP endpoint
-            const publicUrl = `http://localhost:5000/public/uploads/${fileName}`;
+            // Upload to Cloudinary
+            const publicUrl = await new Promise((resolve, reject) => {
+                const uploadStream = cloudinary.uploader.upload_stream(
+                    { folder: 'lost-and-found', public_id: fileName, resource_type: 'image' },
+                    (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result.secure_url);
+                    }
+                );
+                uploadStream.end(buffer);
+            });
 
             await this.collection.doc(itemId).update({
                 imageUrl: publicUrl,
@@ -102,9 +111,6 @@ class ItemsService {
             });
             return result;
         } catch (error) {
-            // Index query error might happen if composite index missing
-            // Fallback to client side sort? No, usually 'userId' filter is enough.
-            // If orderBy fails without index, try removing orderBy.
             console.error(error);
             throw error;
         }
@@ -118,17 +124,9 @@ class ItemsService {
         try {
             let ref = this.collection.where('isDeleted', '==', false);
 
-            // Simple filtering
             if (query.type) {
                 ref = ref.where('type', '==', query.type);
             }
-
-            // Should probably only show 'approved' or 'pending'?
-            // Assuming 'status' is existing.
-            // ref = ref.where('status', '==', 'approved'); 
-            // But requirements say "create ... status=pending". 
-            // Usually discovery only shows open/approved items. 
-            // I'll leave status filter optional or default to not showing deleted.
 
             const snapshot = await ref.get();
             const result = [];
