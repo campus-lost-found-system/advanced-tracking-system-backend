@@ -108,7 +108,9 @@ class ItemsService {
 
             snapshot.forEach(doc => {
                 const data = doc.data();
-                if (data.status !== 'returned') {
+                // Hide returned, for_sale, and sold items from user's active items
+                const hiddenStatuses = ['returned', 'for_sale', 'sold'];
+                if (!hiddenStatuses.includes(data.status)) {
                     result.push({ id: doc.id, ...data });
                 }
             });
@@ -138,8 +140,10 @@ class ItemsService {
             const result = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
-                // Filter out 'returned' items unless explicitly requested
-                if (query.includeReturned || query.status === 'returned' || data.status !== 'returned') {
+                // Filter out returned/for_sale/sold items unless explicitly requested
+                const hiddenStatuses = ['returned', 'for_sale', 'sold'];
+                const isExplicit = query.includeReturned || query.status;
+                if (isExplicit || !hiddenStatuses.includes(data.status)) {
                     result.push({ id: doc.id, ...data });
                 }
             });

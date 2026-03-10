@@ -136,11 +136,18 @@ class ClaimsService {
             }
 
             const itemRef = db.collection('items').doc(claimData.itemId);
-            // We assume item exists as per prompt flow, but good to check in real world.
-            // For this task, we proceed to update.
 
+            // Mark the claim as approved
             transaction.update(claimRef, { status: 'approved' });
+
+            // Mark the found item as returned
             transaction.update(itemRef, { status: 'returned' });
+
+            // If a lost item was linked, mark it as returned too
+            if (claimData.lostItemId) {
+                const lostItemRef = db.collection('items').doc(claimData.lostItemId);
+                transaction.update(lostItemRef, { status: 'returned' });
+            }
 
             return { id: claimId, status: 'approved' };
         });

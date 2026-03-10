@@ -10,7 +10,7 @@ class MatchingService {
      *   - regular http/https URLs that need to be downloaded
      */
     async _getBase64Image(imageUrl) {
-        const url = (imageUrl || '').trim();
+        let url = (imageUrl || '').trim();
         if (url.startsWith('data:image')) {
             // Already a base64 data URI — return as-is
             return url;
@@ -18,6 +18,18 @@ class MatchingService {
         if (!url.startsWith('http://') && !url.startsWith('https://')) {
             throw new Error(`Invalid image URL (must be http/https or data URI): "${url.substring(0, 80)}"`);
         }
+
+        // --- ADD CLOUDINARY RESIZING ---
+        // Groq limit is 4MB base64. Phones upload 5-10MB JPEGs/HEICs.
+        // We inject Cloudinary transformation parameters (w_800,c_limit,q_auto,f_jpg) 
+        // to guarantee a small, fast JPEG representation for AI.
+        if (url.includes('res.cloudinary.com') && url.includes('/upload/')) {
+            // Only inject if it doesn't already have transformations
+            if (!url.includes('/upload/w_') && !url.includes('/upload/c_')) {
+                url = url.replace('/upload/', '/upload/w_800,c_limit,q_auto,f_jpg/');
+            }
+        }
+
         const response = await fetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AdvancedTrackingSystem/1.0)' }
         });

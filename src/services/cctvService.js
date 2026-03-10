@@ -9,13 +9,22 @@ class CctvService {
      * Download an image URL and return it as a base64 data-URI string.
      */
     async _getBase64Image(imageUrl) {
-        const url = (imageUrl || '').trim();
+        let url = (imageUrl || '').trim();
         if (url.startsWith('data:image')) {
             return url;
         }
         if (!url.startsWith('http://') && !url.startsWith('https://')) {
             throw new Error(`Invalid image URL (must be http/https or data URI): "${url.substring(0, 80)}"`);
         }
+
+        // --- ADD CLOUDINARY RESIZING ---
+        // Compress for Groq vision limits
+        if (url.includes('res.cloudinary.com') && url.includes('/upload/')) {
+            if (!url.includes('/upload/w_') && !url.includes('/upload/c_')) {
+                url = url.replace('/upload/', '/upload/w_800,c_limit,q_auto,f_jpg/');
+            }
+        }
+
         const response = await fetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AdvancedTrackingSystem/1.0)' }
         });

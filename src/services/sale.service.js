@@ -1,60 +1,57 @@
 const { db } = require('../config/firebase');
 
 /**
- * Admin approves an item for sale
- * Conditions:
- * - Item must exist
- * - Item must be marked saleEligible
- * - Price must be a valid positive number
+ * Admin lists an item for sale with a price.
+ * Sets status to 'for_sale' so it disappears from the regular items feed.
  */
-const approveForSale = async (itemId, price) => {
+const approveForSale = async (itemId, price, adminId) => {
   const ref = db.collection("items").doc(itemId);
   const doc = await ref.get();
 
-  if (!doc.exists) {
-    throw new Error("Item not found");
-  }
+  if (!doc.exists) throw new Error("Item not found");
 
-  const item = doc.data();
-
-  // 🔒 Ensure item is eligible for sale
-  if (!item.saleEligible) {
-    throw new Error("Item is not eligible for sale");
-  }
-
-  // 🔒 Validate price
   if (typeof price !== "number" || price <= 0) {
     throw new Error("Invalid price");
   }
 
   await ref.update({
     price,
+    status: 'for_sale',
     saleApproved: true,
-    saleStatus: "listed",
+    saleStatus: 'listed',
     approvedAt: Date.now(),
+    approvedBy: adminId || null,
   });
 };
 
 /**
- * Buyer reserves an item
- * Rule: First buyer wins
+ * Get all items currently listed for sale
+ */
+const getForSaleItems = async () => {
+  const snapshot = await db.collection("items")
+    .where("status", "==", "for_sale")
+    .where("isDeleted", "==", false)
+    .get();
+
+  const items = [];
+  snapshot.forEach(doc => {
+    items.push({ id: doc.id, ...doc.data() });
+  });
+  return items;
+};
+
+/**
+ * Buyer expresses interest — records the buyer and tells them to pay admin in person.
  */
 const reserveItem = async (itemId, buyerId) => {
   const ref = db.collection("items").doc(itemId);
 
   await db.runTransaction(async (t) => {
     const doc = await t.get(ref);
-
-    if (!doc.exists) {
-      throw new Error("Item not found");
-    }
+    if (!doc.exists) throw new Error("Item not found");
 
     const item = doc.data();
-
-    // 🔒 Item must be listed
-    if (item.saleStatus !== "listed") {
-      throw new Error("Item not available for sale");
-    }
+    if (item.status !== "for_sale") throw new Error("Item not available for sale");
 
     t.update(ref, {
       saleStatus: "reserved",
@@ -65,34 +62,25 @@ const reserveItem = async (itemId, buyerId) => {
 };
 
 /**
- * Complete the sale
- * Condition:
- * - Item must be reserved before completing sale
+ * Admin marks an item as sold — disappears from for-sale page.
  */
-const completeSale = async (itemId, buyerId) => {
+const markSold = async (itemId, adminId) => {
   const ref = db.collection("items").doc(itemId);
   const doc = await ref.get();
 
-  if (!doc.exists) {
-    throw new Error("Item not found");
-  }
-
-  const item = doc.data();
-
-  // 🔒 Ensure correct flow
-  if (item.saleStatus !== "reserved") {
-    throw new Error("Item must be reserved before completing sale");
-  }
+  if (!doc.exists) throw new Error("Item not found");
 
   await ref.update({
-    saleStatus: "sold",
-    ownerId: buyerId,
+    status: 'sold',
+    saleStatus: 'sold',
     soldAt: Date.now(),
+    soldBy: adminId || null,
   });
 };
 
 module.exports = {
   approveForSale,
+  getForSaleItems,
   reserveItem,
-  completeSale
+  markSold,
 };
