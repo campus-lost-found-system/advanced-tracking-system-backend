@@ -1,5 +1,7 @@
 const { admin, db } = require('../config/firebase');
 const storage = admin.storage();
+const fs = require('fs');
+const path = require('path');
 
 class ItemsService {
     constructor() {
@@ -62,30 +64,14 @@ class ItemsService {
             const buffer = Buffer.from(matches[2], 'base64');
             const extension = type.split('/')[1];
 
-            const bucket = storage.bucket();
-            // Note: If no default bucket config, this might fail. 
-            // Assuming config/firebase.js sets credential correctly and project has default bucket.
+            const fileName = `${itemId}_${Date.now()}.${extension}`;
+            const filePath = path.join(__dirname, '../../public/uploads', fileName);
 
-            const fileName = `items/${itemId}_${Date.now()}.${extension}`;
-            const file = bucket.file(fileName);
+            // Write the buffer to the file system
+            fs.writeFileSync(filePath, buffer);
 
-            await file.save(buffer, {
-                metadata: { contentType: type },
-                public: true // Making it public for easy access
-            });
-
-            // Get Public URL
-            // Option A: file.publicUrl() (available in newer SDKs)
-            // Option B: construction
-            // Using signed URLs is safer but "public: true" suggests we want a public link.
-            // Let's try to get the public URL.
-
-            // Standard firebase storage download URL pattern if public
-            // https://storage.googleapis.com/<bucket-name>/<file-path>
-
-            // But getting the bucket name might be tricky if not in config.
-            // asking file.bucket.name usually works.
-            const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+            // Construct the local static URL using the server's HTTP endpoint
+            const publicUrl = `http://localhost:5000/public/uploads/${fileName}`;
 
             await this.collection.doc(itemId).update({
                 imageUrl: publicUrl,

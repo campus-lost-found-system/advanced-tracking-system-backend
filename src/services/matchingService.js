@@ -34,14 +34,14 @@ class MatchingService {
      * @param {string} collection – "lostItems" or "foundItems"
      * @returns {Object} extracted features
      */
-    async extractFeatures(itemId, collection) {
-        const itemDoc = await db.collection(collection).doc(itemId).get();
-        if (!itemDoc.exists) throw new Error(`Item not found in ${collection}`);
+    async extractFeatures(itemId, collectionParam) {
+        const itemDoc = await db.collection('items').doc(itemId).get();
+        if (!itemDoc.exists) throw new Error(`Item not found in items collection`);
 
         const item = itemDoc.data();
         if (!item.imageUrl) throw new Error('Item does not have an image URL');
 
-        console.log(`[extractFeatures] itemId=${itemId} collection=${collection}`);
+        console.log(`[extractFeatures] itemId=${itemId} collection=${collectionParam}`);
         const base64Image = await this._getBase64Image(item.imageUrl);
 
         const systemPrompt =
@@ -53,7 +53,7 @@ class MatchingService {
         const features = await groqVision.analyzeImage(base64Image, systemPrompt);
 
         // Write features back into the same document
-        await db.collection(collection).doc(itemId).update({ features });
+        await db.collection('items').doc(itemId).update({ features });
 
         return features;
     }
@@ -66,18 +66,20 @@ class MatchingService {
      * @param {string} collection – "lostItems" or "foundItems"
      * @returns {Array|null} top-10 suggestions or null
      */
-    async compareAndSuggest(itemId, collection) {
+    async compareAndSuggest(itemId, collectionParam) {
         // 1. Read source item (must already have features)
-        const sourceDoc = await db.collection(collection).doc(itemId).get();
-        if (!sourceDoc.exists) throw new Error(`Item not found in ${collection}`);
+        const sourceDoc = await db.collection('items').doc(itemId).get();
+        if (!sourceDoc.exists) throw new Error(`Item not found in items collection`);
         const sourceItem = sourceDoc.data();
         if (!sourceItem.features) throw new Error('Features not extracted yet — call extractFeatures first');
 
         // 2. Determine opposite collection
-        const oppositeCollection = collection === 'lostItems' ? 'foundItems' : 'lostItems';
+        const oppositeType = sourceItem.type === 'lost' ? 'found' : 'lost';
 
         // 3. Fetch all candidates that have features
-        const candidatesSnapshot = await db.collection(oppositeCollection).get();
+        const candidatesSnapshot = await db.collection('items')
+            .where('type', '==', oppositeType)
+            .get();
         const candidates = [];
         candidatesSnapshot.forEach(doc => {
             const data = doc.data();

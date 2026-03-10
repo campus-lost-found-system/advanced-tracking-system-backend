@@ -92,19 +92,11 @@ class CctvService {
 
         if (claim.claimantImageUrl && claim.itemId) {
             try {
-                // Try to find the item in lostItems first, then foundItems
-                let itemCollection = null;
-                const lostDoc = await db.collection('lostItems').doc(claim.itemId).get();
-                if (lostDoc.exists) {
-                    itemCollection = 'lostItems';
-                } else {
-                    const foundDoc = await db.collection('foundItems').doc(claim.itemId).get();
-                    if (foundDoc.exists) {
-                        itemCollection = 'foundItems';
-                    }
-                }
-
-                if (itemCollection) {
+                // Find the item in items collection
+                const itemDoc = await db.collection('items').doc(claim.itemId).get();
+                if (itemDoc.exists) {
+                    // Passed collection is irrelevant now to compareAndSuggest internally, but frontend may expect 'lostItems' still
+                    const itemCollection = itemDoc.data().type === 'lost' ? 'lostItems' : 'foundItems';
                     const suggestions = await matchingService.compareAndSuggest(claim.itemId, itemCollection);
                     if (suggestions && suggestions.length > 0) {
                         const top = suggestions[0];
@@ -113,7 +105,7 @@ class CctvService {
                         visualMatchResult = 'Visual comparison found no strong matches.';
                     }
                 } else {
-                    visualMatchResult = 'Referenced item not found in lostItems or foundItems.';
+                    visualMatchResult = 'Referenced item not found in items collection.';
                 }
             } catch (err) {
                 console.error('Visual comparison failed:', err.message);

@@ -36,6 +36,7 @@ const uploadImage = async (req, res) => {
         const result = await itemService.uploadImage(itemId, req.user.uid, image);
         return success(res, result, 'Image uploaded successfully');
     } catch (err) {
+        console.error('Error in uploadImage:', err);
         if (err.message === 'Unauthorized') return error(res, 'Unauthorized', 403);
         if (err.message === 'Item not found') return error(res, 'Item not found', 404);
         return error(res, 'Failed to upload image', 500, err.message);
